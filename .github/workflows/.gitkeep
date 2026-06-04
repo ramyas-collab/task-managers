@@ -1,0 +1,54 @@
+# ============================================
+# WORKFLOW 1: Continuous Integration
+# Runs tests on every push and pull request
+# ============================================
+
+name: 01 - CI Run Tests
+
+# TRIGGER: when does this workflow run?
+on:
+  push:
+    branches:
+      - main          # runs when you push to main
+      - 'feature/**'  # runs when you push to any feature/ branch
+  pull_request:
+    branches:
+      - main          # runs when a PR targets main
+
+# JOBS: what work gets done?
+jobs:
+  run-tests:
+    name: Run Test Suite
+    runs-on: ubuntu-latest   # use a Linux runner
+
+    steps:
+      # Step 1: Checkout — clone your repo onto the runner
+      # Without this, the runner has NO code to work with
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js on the runner
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'     # which Node version to use
+          cache: 'npm'           # built-in npm caching (bonus!)
+
+      # Step 3: Install dependencies
+      # npm ci is preferred over npm install in CI:
+      # - faster (uses package-lock.json exactly)
+      # - fails if lock file is out of sync
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Run the tests
+      - name: Run tests
+        run: npm test
+
+      # Step 5: Show a success message with context info
+      - name: Print success info
+        run: |
+          echo "✅ Tests passed!"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
