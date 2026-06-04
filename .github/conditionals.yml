@@ -1,0 +1,88 @@
+# ============================================
+# WORKFLOW 5: Conditional Execution
+# Control exactly what runs and when
+# ============================================
+
+name: 05 - Conditionals
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+
+      # This step ONLY runs if previous steps failed
+      - name: Notify on test failure
+        if: failure()
+        run: |
+          echo "❌ Tests failed!"
+          echo "Failed on branch: ${{ github.ref_name }}"
+          echo "Commit by: ${{ github.actor }}"
+          # In real life: send Slack/email notification here
+
+      # This step ALWAYS runs (even if tests fail)
+      - name: Always print summary
+        if: always()
+        run: |
+          echo "=== Workflow Summary ==="
+          echo "Status: ${{ job.status }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Run #: ${{ github.run_number }}"
+
+  # This job only runs when pushing to main (not on PRs, not on develop)
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    #  ↑ two conditions: must be main branch AND a push (not PR)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy application
+        run: echo "🚀 Deploying to production..."
+
+      # Only runs if deploy step above FAILED
+      - name: Rollback on failure
+        if: failure()
+        run: echo "⚠️ Deploy failed! Rolling back..."
+
+      # Only runs if deploy step SUCCEEDED
+      - name: Confirm deployment
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Version: ${{ github.sha }}"
+
+  # This job only runs on PRs (not on direct pushes)
+  pr-checks:
+    name: PR Quality Checks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+      - name: Check PR size
+        run: |
+          echo "Checking PR from: ${{ github.head_ref }}"
+          echo "Targeting branch: ${{ github.base_ref }}"
+          echo "PR number: ${{ github.event.pull_request.number }}"
