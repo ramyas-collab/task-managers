@@ -1,0 +1,59 @@
+# ============================================
+# WORKFLOW 3: Matrix Strategy
+# Test across multiple Node.js versions in parallel
+# ============================================
+
+name: 03 - Matrix Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-matrix:
+    name: Test on Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+
+    # THE MATRIX — defines all combinations
+    strategy:
+      fail-fast: false    # don't cancel other jobs if one fails
+                          # we want to see ALL results
+      matrix:
+        node-version: [16, 18, 20]   # 3 Node versions
+        os: [ubuntu-latest, windows-latest]  # 2 OS
+        # Total: 6 jobs run in parallel!
+
+        # EXCLUDE a specific combination
+        exclude:
+          - os: windows-latest
+            node-version: 16    # skip Node 16 on Windows
+
+        # INCLUDE an extra combination with extra data
+        include:
+          - os: ubuntu-latest
+            node-version: 20
+            experimental: true   # custom variable you can use in steps
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}  # uses matrix value
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      # Show which combination this is
+      - name: Print matrix info
+        run: |
+          echo "Node version: ${{ matrix.node-version }}"
+          echo "OS: ${{ matrix.os }}"
+          echo "Experimental: ${{ matrix.experimental }}"
